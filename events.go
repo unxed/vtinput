@@ -85,5 +85,37 @@ func (e InputEvent) String() string {
 		return fmt.Sprintf("Key{VK:0x%X Scan:0x%X%s %s Mods:0x%X}",
 			e.VirtualKeyCode, e.VirtualScanCode, charStr, state, e.ControlKeyState)
 	}
+
+	if e.Type == MouseEventType {
+		btn := "None"
+		switch e.ButtonState {
+		case FromLeft1stButtonPressed:
+			btn = "Left"
+		case FromLeft2ndButtonPressed:
+			btn = "Middle"
+		case RightmostButtonPressed:
+			btn = "Right"
+		}
+
+		action := "UP"
+		if e.KeyDown {
+			action = "DOWN"
+		}
+		if (e.MouseEventFlags & MouseMoved) != 0 {
+			action = "MOVE"
+		}
+
+		wheel := ""
+		if e.WheelDirection > 0 {
+			wheel = " WHEEL_UP"
+		}
+		if e.WheelDirection < 0 {
+			wheel = " WHEEL_DOWN"
+		}
+
+		return fmt.Sprintf("Mouse{Pos:%d,%d Btn:%s %s%s Mods:0x%X}",
+			e.MouseX, e.MouseY, btn, action, wheel, e.ControlKeyState)
+	}
+
 	return fmt.Sprintf("Event{Type:%d Mods:0x%X}", e.Type, e.ControlKeyState)
 }

@@ -10,6 +10,10 @@ import (
 const (
 	seqEnableWin32  = "\x1b[?9001h"
 	seqDisableWin32 = "\x1b[?9001l"
+
+	// 1003: Any event mouse (motion + buttons), 1006: SGR extended mode
+	seqEnableMouse  = "\x1b[?1003h\x1b[?1006h"
+	seqDisableMouse = "\x1b[?1006l\x1b[?1003l"
 )
 
 // Enable puts the terminal into Raw Mode and enables Win32 Input Mode.
@@ -30,20 +34,15 @@ func Enable() (func(), error) {
 		return nil, err
 	}
 
-	// 3. Send the escape sequence to enable Win32 Input Mode
-	// We write directly to Stdout.
-	if _, err := os.Stdout.WriteString(seqEnableWin32); err != nil {
-		// If writing fails, try to restore terminal state immediately
+	// 3. Send activation sequences
+	if _, err := os.Stdout.WriteString(seqEnableWin32 + seqEnableMouse); err != nil {
 		term.Restore(fd, oldState)
 		return nil, err
 	}
 
 	// 4. Create the restore function (closure)
-	// This function captures 'fd' and 'oldState' and can be called later.
 	restore := func() {
-		// Disable Win32 Input Mode
-		os.Stdout.WriteString(seqDisableWin32)
-		// Restore original terminal attributes (echo, line buffering, etc.)
+		os.Stdout.WriteString(seqDisableMouse + seqDisableWin32)
 		term.Restore(fd, oldState)
 	}
 

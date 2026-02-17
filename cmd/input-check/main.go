@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/unxed/vtinput"
@@ -22,76 +23,26 @@ func main() {
 	fmt.Print("Для выхода нажми Ctrl+C или Esc.\r\n")
 	fmt.Print("------------------------------------------------\r\n")
 
-	// Буфер для чтения данных из stdin
-	buf := make([]byte, 128)
-	// Аккумулятор для сбора неполных последовательностей
-	var accumulator []byte
+	// 2. Создаем Reader для ввода
+	reader := vtinput.NewReader(os.Stdin)
 
 	for {
-		// 2. Читаем сырые байты
-		n, err := os.Stdin.Read(buf)
+		// 3. Читаем следующее событие (блокирующий вызов)
+		event, err := reader.ReadEvent()
 		if err != nil {
+			if err != io.EOF {
+				fmt.Printf("Read error: %v\r\n", err)
+			}
 			break
 		}
 
-		// Добавляем прочитанное в хвост аккумулятора
-		accumulator = append(accumulator, buf[:n]...)
+		// 4. Выводим распознанное событие
+		fmt.Printf("Event: %s\r\n", event)
 
-		// 3. Пытаемся разобрать то, что накопилось
-		for len(accumulator) > 0 {
-			// Вызываем наш парсер
-			event, consumed, err := vtinput.ParseWin32InputEvent(accumulator)
-
-			if err == nil {
-				// Успех! Мы распознали событие Win32
-				fmt.Printf("Event: %s\r\n", event)
-
-				// Удаляем разобранный кусок из аккумулятора
-				accumulator = accumulator[consumed:]
-
-				// Проверка на выход
-				if isExitEvent(event) {
-					fmt.Print("Exiting...\r\n")
-					return
-				}
-				continue
-			}
-
-			// Если ошибка "Incomplete" — значит последовательность не дошла целиком.
-			// Прерываем цикл разбора и идем читать из Stdin дальше.
-			if err == vtinput.ErrIncomplete {
-				break
-			}
-
-			// Если ошибка "Invalid" — значит это не Win32 последовательность.
-			// Это может быть мусор или обычный ввод, если терминал что-то перепутал.
-			// Просто выведем байт как есть и пропустим его.
-			if err == vtinput.ErrInvalidSequence {
-				b := accumulator[0]
-
-				// HACK: Handle legacy backspace (0x7F) from some terminals
-				if b == 0x7F {
-					// Manually create the expected KeyDown event for VK_BACK
-					backspaceEvent := &vtinput.InputEvent{
-						Type:           vtinput.KeyEventType,
-						VirtualKeyCode: vtinput.VK_BACK,
-						KeyDown:        true,
-						// Other fields are zero, which is fine for this case
-					}
-					fmt.Printf("Event (Normalized): %s\r\n", backspaceEvent)
-				} else {
-					// Print other raw bytes as before
-					if b >= 32 && b <= 126 {
-						fmt.Printf("Raw Char: '%c'\r\n", b)
-					} else {
-						fmt.Printf("Raw Byte: 0x%02X\r\n", b)
-					}
-				}
-
-				// Сдвигаем аккумулятор на 1 байт вперед
-				accumulator = accumulator[1:]
-				continue
-			}
+		// 5. Проверка на выход
+		if isExitEvent(event) {
+			fmt.Print("Exiting...\r\n")
+			return
 		}
 	}
 }
