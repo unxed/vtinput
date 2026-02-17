@@ -87,13 +87,13 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 					goto waitForMore
 				}
 
-				// 3. Handle Double ESC
+				// 3. Handle Double ESC (User typed ESC twice quickly or used it as a meta-key)
 				if len(r.buf) >= 2 && r.buf[1] == 0x1B {
-					r.buf = r.buf[1:] // Consume one ESC
+					r.buf = r.buf[2:] // Consume BOTH ESC bytes
 					return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_ESCAPE, KeyDown: true}, nil
 				}
 
-				// 5. Handle Legacy Alt (ESC + Char)
+				// 4. Handle Legacy Alt (ESC + Char)
 				if len(r.buf) >= 2 && utf8.FullRune(r.buf[1:]) {
 					r.buf = r.buf[1:] // Consume ESC
 					character, size := utf8.DecodeRune(r.buf)
@@ -116,14 +116,20 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 					r.buf = r.buf[1:]
 					return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_ESCAPE, KeyDown: true}, nil
 				case err := <-r.errChan:
-					// Before returning error, try a non-blocking read to see if data arrived
-					select {
-					case b := <-r.dataChan:
-						r.buf = append(r.buf, b)
-						continue
-					default:
+					// Drain all pending data before handling error
+					hasMore := true
+					for hasMore {
+						select {
+						case b := <-r.dataChan:
+							r.buf = append(r.buf, b)
+						default:
+							hasMore = false
+						}
+					}
+					if len(r.buf) == 0 {
 						return nil, err
 					}
+					continue
 				}
 			}
 
@@ -148,13 +154,20 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 		case b := <-r.dataChan:
 			r.buf = append(r.buf, b)
 		case err := <-r.errChan:
-			// Check for data one last time before returning the error
-			select {
-			case b := <-r.dataChan:
-				r.buf = append(r.buf, b)
-			default:
+			// Drain all pending data
+			hasMore := true
+			for hasMore {
+				select {
+				case b := <-r.dataChan:
+					r.buf = append(r.buf, b)
+				default:
+					hasMore = false
+				}
+			}
+			if len(r.buf) == 0 {
 				return nil, err
 			}
+			// If buf has data, the next loop iteration will process it
 		}
 	}
 }
