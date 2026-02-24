@@ -14,13 +14,15 @@ import (
 type activeKey struct {
 	pressedAt time.Time
 	isLegacy  bool
+	isDown    bool
 }
 
 var (
-	mu         sync.Mutex
+	mu          sync.Mutex
 	pressedKeys = make(map[uint16]activeKey)
 	logLines    []string
 	logLimit    = 10
+	currentMods uint32
 )
 
 // Keyboard layout rows for visualization
@@ -77,21 +79,25 @@ func main() {
 			}
 			drawUI()
 
-		case <-ticker.C:
-			// Cleanup legacy keys that "timed out"
-			mu.Lock()
-			changed := false
-			now := time.Now()
-			for k, v := range pressedKeys {
-				if v.isLegacy && now.Sub(v.pressedAt) > 150*time.Millisecond {
-					delete(pressedKeys, k)
-					changed = true
+			case <-ticker.C:
+				mu.Lock()
+				changed := false
+				now := time.Now()
+				for k, v := range pressedKeys {
+					// Remove legacy keys after 150ms timeout
+					if v.isLegacy && now.Sub(v.pressedAt) > 150*time.Millisecond {
+						delete(pressedKeys, k)
+						changed = true
+					// Remove modern keys only if released AND 100ms passed (to make fast typing visible)
+					} else if !v.isLegacy && !v.isDown && now.Sub(v.pressedAt) > 100*time.Millisecond {
+						delete(pressedKeys, k)
+						changed = true
+					}
 				}
-			}
-			mu.Unlock()
-			if changed {
-				drawUI()
-			}
+				mu.Unlock()
+				if changed {
+					drawUI()
+				}
 		}
 	}
 }
@@ -99,6 +105,8 @@ func main() {
 func handleEvent(e *vtinput.InputEvent) {
 	mu.Lock()
 	defer mu.Unlock()
+
+	currentMods = e.ControlKeyState
 
 	// Log message
 	msg := fmt.Sprintf("Event: %s", e)
@@ -112,9 +120,13 @@ func handleEvent(e *vtinput.InputEvent) {
 			pressedKeys[e.VirtualKeyCode] = activeKey{
 				pressedAt: time.Now(),
 				isLegacy:  e.IsLegacy,
+				isDown:    true,
 			}
 		} else {
-			delete(pressedKeys, e.VirtualKeyCode)
+			if ak, ok := pressedKeys[e.VirtualKeyCode]; ok {
+				ak.isDown = false
+				pressedKeys[e.VirtualKeyCode] = ak
+			}
 		}
 	}
 }
@@ -126,8 +138,7 @@ func drawUI() {
 	// Move to top-left
 	fmt.Print("\033[H")
 
-	fmt.Println("--- f4 Input Visualizer (Press Ctrl+C/Esc to exit) ---")
-	fmt.Println("")
+	fmt.Print("--- f4 Input Visualizer (Press Ctrl+C/Esc to exit) ---\r\n\r\n")
 
 	for _, row := range keyRows {
 		for _, vk := range row {
@@ -136,8 +147,23 @@ func drawUI() {
 				name = fmt.Sprintf("0x%X", vk)
 			}
 
-			// Check if pressed
+			// Check if pressed directly
+			isPressed := false
 			if _, pressed := pressedKeys[vk]; pressed {
+				isPressed = true
+			}
+
+			// Check modifiers from global state
+			if vk == vtinput.VK_LCONTROL && (currentMods&vtinput.LeftCtrlPressed) != 0 { isPressed = true }
+			if vk == vtinput.VK_RCONTROL && (currentMods&vtinput.RightCtrlPressed) != 0 { isPressed = true }
+			if vk == vtinput.VK_LMENU && (currentMods&vtinput.LeftAltPressed) != 0 { isPressed = true }
+			if vk == vtinput.VK_RMENU && (currentMods&vtinput.RightAltPressed) != 0 { isPressed = true }
+			if vk == vtinput.VK_LSHIFT && (currentMods&vtinput.ShiftPressed) != 0 { isPressed = true }
+			if vk == vtinput.VK_RSHIFT && (currentMods&vtinput.ShiftPressed) != 0 { isPressed = true }
+			if vk == vtinput.VK_CAPITAL && (currentMods&vtinput.CapsLockOn) != 0 { isPressed = true }
+			if vk == vtinput.VK_NUMLOCK && (currentMods&vtinput.NumLockOn) != 0 { isPressed = true }
+
+			if isPressed {
 				// Green background for pressed keys
 				fmt.Printf("\033[42;30m %s \033[0m ", name)
 			} else {
@@ -147,7 +173,7 @@ func drawUI() {
 		fmt.Print("\r\n\r\n") // Double spacing for clarity
 	}
 
-	fmt.Println("---------------- Log ----------------")
+	fmt.Print("---------------- Log ----------------\r\n")
 	for _, line := range logLines {
 		// Clear line before printing
 		fmt.Printf("\033[K%s\r\n", line)
