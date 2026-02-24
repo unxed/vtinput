@@ -131,6 +131,254 @@ func TestParseMouseSGR(t *testing.T) {
 		t.Errorf("failed to parse Mouse Move: got %+v", event)
 	}
 }
+func TestParseKitty(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     []byte
+		want     *InputEvent
+		err      error
+	}{
+		{
+			name: "Char 'a' (no mods)",
+			data: []byte("\x1b[97u"),
+			want: &InputEvent{
+				Type:            KeyEventType,
+				VirtualKeyCode:  VK_A,
+				Char:            'a',
+				KeyDown:         true,
+				ControlKeyState: 0,
+				RepeatCount:     1,
+			},
+		},
+		{
+			name: "Char 'A' (Shift)",
+			data: []byte("\x1b[97;2u"),
+			want: &InputEvent{
+				Type:            KeyEventType,
+				VirtualKeyCode:  VK_A,
+				Char:            'a', // Parser keeps base char, app handles casing usually, but flags are set
+				KeyDown:         true,
+				ControlKeyState: ShiftPressed,
+				RepeatCount:     1,
+			},
+		},
+		{
+			name: "Ctrl+a",
+			data: []byte("\x1b[97;5u"),
+			want: &InputEvent{
+				Type:            KeyEventType,
+				VirtualKeyCode:  VK_A,
+				Char:            'a',
+				KeyDown:         true,
+				ControlKeyState: LeftCtrlPressed,
+				RepeatCount:     1,
+			},
+		},
+		{
+			name: "Ctrl+Shift+a",
+			data: []byte("\x1b[97;6u"),
+			want: &InputEvent{
+				Type:            KeyEventType,
+				VirtualKeyCode:  VK_A,
+				Char:            'a',
+				KeyDown:         true,
+				ControlKeyState: LeftCtrlPressed | ShiftPressed,
+				RepeatCount:     1,
+			},
+		},
+		{
+			name: "Key Release 'a'",
+			data: []byte("\x1b[97;1:3u"),
+			want: &InputEvent{
+				Type:            KeyEventType,
+				VirtualKeyCode:  VK_A,
+				Char:            'a',
+				KeyDown:         false,
+				ControlKeyState: 0,
+				RepeatCount:     1,
+			},
+		},
+		{
+			name: "Functional: Escape",
+			data: []byte("\x1b[27u"),
+			want: &InputEvent{
+				Type:           KeyEventType,
+				VirtualKeyCode: VK_ESCAPE,
+				Char:           0,
+				KeyDown:        true,
+				RepeatCount:    1,
+			},
+		},
+		{
+			name: "Functional: Enter",
+			data: []byte("\x1b[13u"),
+			want: &InputEvent{
+				Type:           KeyEventType,
+				VirtualKeyCode: VK_RETURN,
+				Char:           0,
+				KeyDown:        true,
+				RepeatCount:    1,
+			},
+		},
+		{
+			name: "Functional: Tab",
+			data: []byte("\x1b[9u"),
+			want: &InputEvent{
+				Type:           KeyEventType,
+				VirtualKeyCode: VK_TAB,
+				Char:           0, // Tab char usually handled by app logic or VK mapping
+				KeyDown:        true,
+				RepeatCount:    1,
+			},
+		},
+		{
+			name: "Arrow Up (Shift)",
+			data: []byte("\x1b[1;2A"),
+			want: &InputEvent{
+				Type:            KeyEventType,
+				VirtualKeyCode:  VK_UP,
+				Char:            0,
+				KeyDown:         true,
+				ControlKeyState: ShiftPressed | EnhancedKey,
+				RepeatCount:     1,
+			},
+		},
+		{
+			name: "Numpad 5",
+			data: []byte("\x1b[57404u"),
+			want: &InputEvent{
+				Type:           KeyEventType,
+				VirtualKeyCode: VK_NUMPAD5,
+				Char:           0,
+				KeyDown:        true,
+				RepeatCount:    1,
+			},
+		},
+		{
+			name: "Workaround: F3 (WezTerm #3473)",
+			data: []byte("\x1b[13;2~"), // Should be Shift+F3, mapped from 13~
+			want: &InputEvent{
+				Type:            KeyEventType,
+				VirtualKeyCode:  VK_F3,
+				Char:            0,
+				KeyDown:         true,
+				ControlKeyState: ShiftPressed,
+				RepeatCount:     1,
+			},
+		},
+		{
+			name: "Workaround: Backspace (WezTerm #3594)",
+			data: []byte("\x1b[8u"),
+			want: &InputEvent{
+				Type:           KeyEventType,
+				VirtualKeyCode: VK_BACK,
+				Char:           0,
+				KeyDown:        true,
+				RepeatCount:    1,
+			},
+		},
+		{
+			name: "Right Ctrl",
+			data: []byte("\x1b[57448u"),
+			want: &InputEvent{
+				Type:            KeyEventType,
+				VirtualKeyCode:  VK_CONTROL,
+				Char:            0,
+				KeyDown:         true,
+				ControlKeyState: RightCtrlPressed | EnhancedKey,
+				RepeatCount:     1,
+			},
+		},
+		{
+			name: "Invalid Kitty Sequence (bad char)",
+			data: []byte("\x1b[97x"),
+			want: nil,
+			err:  ErrInvalidSequence,
+		},
+		{
+			name: "Invalid Kitty Sequence (bad format)",
+			data: []byte("\x1b[97;;u"),
+			want: nil,
+			err:  ErrInvalidSequence,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, _, err := ParseKitty(tt.data)
+			if err != tt.err {
+				t.Errorf("ParseKitty() error = %v, wantErr %v", err, tt.err)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ParseKitty() got = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+func TestReadEvent_Focus(t *testing.T) {
+	// 1. Focus In, 2. Focus Out
+	input := []byte("\x1b[I\x1b[O")
+	r := NewReader(bytes.NewReader(input))
+
+	// Check Focus In
+	e, err := r.ReadEvent()
+	if err != nil {
+		t.Fatalf("ReadEvent failed: %v", err)
+	}
+	if e.Type != FocusEventType || !e.SetFocus {
+		t.Errorf("Expected Focus IN, got %+v", e)
+	}
+
+	// Check Focus Out
+	e, err = r.ReadEvent()
+	if err != nil {
+		t.Fatalf("ReadEvent failed: %v", err)
+	}
+	if e.Type != FocusEventType || e.SetFocus {
+		t.Errorf("Expected Focus OUT, got %+v", e)
+	}
+}
+
+func TestReadEvent_Paste(t *testing.T) {
+	// 1. Start Paste, 2. End Paste
+	input := []byte("\x1b[200~\x1b[201~")
+	r := NewReader(bytes.NewReader(input))
+
+	// Check Paste Start
+	e, err := r.ReadEvent()
+	if err != nil {
+		t.Fatalf("ReadEvent failed: %v", err)
+	}
+	if e.Type != PasteEventType || !e.PasteStart {
+		t.Errorf("Expected Paste START, got %+v", e)
+	}
+
+	// Check Paste End
+	e, err = r.ReadEvent()
+	if err != nil {
+		t.Fatalf("ReadEvent failed: %v", err)
+	}
+	if e.Type != PasteEventType || e.PasteStart {
+		t.Errorf("Expected Paste END, got %+v", e)
+	}
+}
+
+func TestReadEvent_Fallback(t *testing.T) {
+	// \x1b[Z is Shift+Tab in legacy CSI.
+	// ParseKitty does not include 'Z' in its valid commands list,
+	// so Reader should fallback to ParseLegacyCSI.
+	input := []byte("\x1b[Z")
+	r := NewReader(bytes.NewReader(input))
+
+	e, err := r.ReadEvent()
+	if err != nil {
+		t.Fatalf("ReadEvent failed: %v", err)
+	}
+	if e.VirtualKeyCode != VK_TAB || (e.ControlKeyState & ShiftPressed) == 0 {
+		t.Errorf("Expected Shift+Tab via fallback, got %+v", e)
+	}
+}
 
 func TestReadEvent_AltCyrillic(t *testing.T) {
 	pr, pw := io.Pipe()
