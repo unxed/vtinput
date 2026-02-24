@@ -106,7 +106,36 @@ func handleEvent(e *vtinput.InputEvent) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	currentMods = e.ControlKeyState
+	// Terminal emulators often send stale modifier states for lock keys on key release.
+	// We predict the new lock state on key down (inverting the pre-press state),
+	// and ignore the event's lock bits for these keys to prevent visual sticking.
+	if e.Type == vtinput.KeyEventType && (e.VirtualKeyCode == vtinput.VK_CAPITAL || e.VirtualKeyCode == vtinput.VK_NUMLOCK || e.VirtualKeyCode == vtinput.VK_SCROLL) {
+		if e.KeyDown {
+			if e.VirtualKeyCode == vtinput.VK_CAPITAL {
+				if (e.ControlKeyState & vtinput.CapsLockOn) == 0 {
+					currentMods |= vtinput.CapsLockOn
+				} else {
+					currentMods &= ^uint32(vtinput.CapsLockOn)
+				}
+			} else if e.VirtualKeyCode == vtinput.VK_NUMLOCK {
+				if (e.ControlKeyState & vtinput.NumLockOn) == 0 {
+					currentMods |= vtinput.NumLockOn
+				} else {
+					currentMods &= ^uint32(vtinput.NumLockOn)
+				}
+			} else if e.VirtualKeyCode == vtinput.VK_SCROLL {
+				if (e.ControlKeyState & vtinput.ScrollLockOn) == 0 {
+					currentMods |= vtinput.ScrollLockOn
+				} else {
+					currentMods &= ^uint32(vtinput.ScrollLockOn)
+				}
+			}
+		}
+		lockMask := uint32(vtinput.CapsLockOn | vtinput.NumLockOn | vtinput.ScrollLockOn)
+		currentMods = (currentMods & lockMask) | (e.ControlKeyState & ^lockMask)
+	} else {
+		currentMods = e.ControlKeyState
+	}
 
 	// Log message
 	msg := fmt.Sprintf("Event: %s", e)
