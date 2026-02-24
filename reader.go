@@ -61,20 +61,30 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 				}
 
 				// 2. Handle CSI sequences (ESC [ ...)
-				if _, command, err := scanCSI(r.buf); err == nil {
+				if terminatorIdx, command, err := scanCSI(r.buf); err == nil {
 					var event *InputEvent
 					var consumed int
 					var pErr error
 
-					switch command {
-					case '_': // Win32 Input Mode
-						event, consumed, pErr = ParseWin32InputEvent(r.buf)
-					case 'M', 'm': // SGR Mouse
-						event, consumed, pErr = ParseMouseSGR(r.buf)
-					default: // Kitty Protocol or Legacy CSI
-						event, consumed, pErr = ParseKitty(r.buf)
-						if pErr == ErrInvalidSequence {
-							event, consumed, pErr = ParseLegacyCSI(r.buf)
+					if command == 'I' && terminatorIdx == 2 {
+						event, consumed = &InputEvent{Type: FocusEventType, SetFocus: true}, 3
+					} else if command == 'O' && terminatorIdx == 2 {
+						event, consumed = &InputEvent{Type: FocusEventType, SetFocus: false}, 3
+					} else if command == '~' && string(r.buf[2:terminatorIdx]) == "200" {
+						event, consumed = &InputEvent{Type: PasteEventType, PasteStart: true}, terminatorIdx+1
+					} else if command == '~' && string(r.buf[2:terminatorIdx]) == "201" {
+						event, consumed = &InputEvent{Type: PasteEventType, PasteStart: false}, terminatorIdx+1
+					} else {
+						switch command {
+						case '_': // Win32 Input Mode
+							event, consumed, pErr = ParseWin32InputEvent(r.buf)
+						case 'M', 'm': // SGR Mouse
+							event, consumed, pErr = ParseMouseSGR(r.buf)
+						default: // Kitty Protocol or Legacy CSI
+							event, consumed, pErr = ParseKitty(r.buf)
+							if pErr == ErrInvalidSequence {
+								event, consumed, pErr = ParseLegacyCSI(r.buf)
+							}
 						}
 					}
 

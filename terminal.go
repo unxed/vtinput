@@ -17,6 +17,10 @@ const (
 	// 1003: Any event mouse (motion + buttons), 1006: SGR extended mode
 	seqEnableMouse  = "\x1b[?1003h\x1b[?1006h"
 	seqDisableMouse = "\x1b[?1006l\x1b[?1003l"
+
+	// 1004: Focus tracking, 2004: Bracketed paste
+	seqEnableExt  = "\x1b[?1004h\x1b[?2004h"
+	seqDisableExt = "\x1b[?2004l\x1b[?1004l"
 )
 
 // Enable puts the terminal into Raw Mode and enables Win32 Input Mode.
@@ -38,14 +42,14 @@ func Enable() (func(), error) {
 	}
 
 	// 3. Send activation sequences
-	if _, err := os.Stdout.WriteString(seqEnableKitty + seqEnableWin32 + seqEnableMouse); err != nil {
+	if _, err := os.Stdout.WriteString(seqEnableKitty + seqEnableWin32 + seqEnableMouse + seqEnableExt); err != nil {
 		term.Restore(fd, oldState)
 		return nil, err
 	}
 
 	// 4. Create the restore function (closure)
 	restore := func() {
-		os.Stdout.WriteString(seqDisableMouse + seqDisableWin32 + seqDisableKitty)
+		os.Stdout.WriteString(seqDisableExt + seqDisableMouse + seqDisableWin32 + seqDisableKitty)
 		term.Restore(fd, oldState)
 	}
 

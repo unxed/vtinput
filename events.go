@@ -39,6 +39,7 @@ const (
 	KeyEventType   EventType = 0x0001
 	MouseEventType EventType = 0x0002
 	FocusEventType EventType = 0x0010
+	PasteEventType EventType = 0x0020
 )
 
 // InputEvent is a generic container for any event (Key, Mouse, Focus).
@@ -62,6 +63,9 @@ type InputEvent struct {
 
 	// Focus Event Data
 	SetFocus bool
+
+	// Paste Event Data
+	PasteStart bool
 
 	// Shared
 	ControlKeyState uint32
@@ -125,6 +129,22 @@ func (e InputEvent) String() string {
 
 		return fmt.Sprintf("Mouse{Pos:%d,%d Btn:%s %s%s Mods:0x%X}%s",
 			e.MouseX, e.MouseY, btn, action, wheel, e.ControlKeyState, legacyStr)
+	}
+
+	if e.Type == FocusEventType {
+		state := "OUT"
+		if e.SetFocus {
+			state = "IN"
+		}
+		return fmt.Sprintf("Focus{%s}", state)
+	}
+
+	if e.Type == PasteEventType {
+		state := "END"
+		if e.PasteStart {
+			state = "START"
+		}
+		return fmt.Sprintf("Paste{%s}", state)
 	}
 
 	return fmt.Sprintf("Event{Type:%d Mods:0x%X}%s", e.Type, e.ControlKeyState, legacyStr)
