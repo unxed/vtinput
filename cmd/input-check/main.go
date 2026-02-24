@@ -25,14 +25,24 @@ var (
 	currentMods uint32
 )
 
-// Keyboard layout rows for visualization (0 indicates a visual spacer)
+const (
+	_f1   = 0xFF00 + 11
+	_f5   = 0xFF00 + 35
+	_f9   = 0xFF00 + 59
+	_nav  = 0xFF00 + 86
+	_up   = 0xFF00 + 95
+	_num  = 0xFF00 + 113
+	_nDot = 0xFF00 + 127
+)
+
+// Keyboard layout rows for visualization (0xFF00+x pads to absolute column x)
 var keyRows = [][]uint16{
-	{vtinput.VK_ESCAPE, 0, vtinput.VK_F1, vtinput.VK_F2, vtinput.VK_F3, vtinput.VK_F4, 0, vtinput.VK_F5, vtinput.VK_F6, vtinput.VK_F7, vtinput.VK_F8, 0, vtinput.VK_F9, vtinput.VK_F10, vtinput.VK_F11, vtinput.VK_F12, 0, vtinput.VK_SNAPSHOT, vtinput.VK_SCROLL, vtinput.VK_PAUSE},
-	{vtinput.VK_OEM_3, vtinput.VK_1, vtinput.VK_2, vtinput.VK_3, vtinput.VK_4, vtinput.VK_5, vtinput.VK_6, vtinput.VK_7, vtinput.VK_8, vtinput.VK_9, vtinput.VK_0, vtinput.VK_OEM_MINUS, vtinput.VK_OEM_PLUS, vtinput.VK_BACK, 0, vtinput.VK_INSERT, vtinput.VK_HOME, vtinput.VK_PRIOR, 0, vtinput.VK_NUMLOCK, vtinput.VK_DIVIDE, vtinput.VK_MULTIPLY, vtinput.VK_SUBTRACT},
-	{vtinput.VK_TAB, vtinput.VK_Q, vtinput.VK_W, vtinput.VK_E, vtinput.VK_R, vtinput.VK_T, vtinput.VK_Y, vtinput.VK_U, vtinput.VK_I, vtinput.VK_O, vtinput.VK_P, vtinput.VK_OEM_4, vtinput.VK_OEM_6, vtinput.VK_OEM_5, 0, vtinput.VK_DELETE, vtinput.VK_END, vtinput.VK_NEXT, 0, vtinput.VK_NUMPAD7, vtinput.VK_NUMPAD8, vtinput.VK_NUMPAD9, vtinput.VK_ADD},
-	{vtinput.VK_CAPITAL, vtinput.VK_A, vtinput.VK_S, vtinput.VK_D, vtinput.VK_F, vtinput.VK_G, vtinput.VK_H, vtinput.VK_J, vtinput.VK_K, vtinput.VK_L, vtinput.VK_OEM_1, vtinput.VK_OEM_7, vtinput.VK_RETURN, 0, 0, 0, 0, 0, 0, vtinput.VK_NUMPAD4, vtinput.VK_NUMPAD5, vtinput.VK_NUMPAD6},
-	{vtinput.VK_LSHIFT, vtinput.VK_OEM_102, vtinput.VK_Z, vtinput.VK_X, vtinput.VK_C, vtinput.VK_V, vtinput.VK_B, vtinput.VK_N, vtinput.VK_M, vtinput.VK_OEM_COMMA, vtinput.VK_OEM_PERIOD, vtinput.VK_OEM_2, vtinput.VK_RSHIFT, 0, 0, vtinput.VK_UP, 0, 0, 0, vtinput.VK_NUMPAD1, vtinput.VK_NUMPAD2, vtinput.VK_NUMPAD3, vtinput.VK_RETURN},
-	{vtinput.VK_LCONTROL, vtinput.VK_LWIN, vtinput.VK_LMENU, vtinput.VK_SPACE, vtinput.VK_RMENU, vtinput.VK_RWIN, vtinput.VK_APPS, vtinput.VK_RCONTROL, 0, vtinput.VK_LEFT, vtinput.VK_DOWN, vtinput.VK_RIGHT, 0, 0, vtinput.VK_NUMPAD0, vtinput.VK_DECIMAL},
+	{vtinput.VK_ESCAPE, _f1, vtinput.VK_F1, vtinput.VK_F2, vtinput.VK_F3, vtinput.VK_F4, _f5, vtinput.VK_F5, vtinput.VK_F6, vtinput.VK_F7, vtinput.VK_F8, _f9, vtinput.VK_F9, vtinput.VK_F10, vtinput.VK_F11, vtinput.VK_F12, _nav, vtinput.VK_SNAPSHOT, vtinput.VK_SCROLL, vtinput.VK_PAUSE},
+	{vtinput.VK_OEM_3, vtinput.VK_1, vtinput.VK_2, vtinput.VK_3, vtinput.VK_4, vtinput.VK_5, vtinput.VK_6, vtinput.VK_7, vtinput.VK_8, vtinput.VK_9, vtinput.VK_0, vtinput.VK_OEM_MINUS, vtinput.VK_OEM_PLUS, vtinput.VK_BACK, _nav, vtinput.VK_INSERT, vtinput.VK_HOME, vtinput.VK_PRIOR, _num, vtinput.VK_NUMLOCK, vtinput.VK_DIVIDE, vtinput.VK_MULTIPLY, vtinput.VK_SUBTRACT},
+	{vtinput.VK_TAB, vtinput.VK_Q, vtinput.VK_W, vtinput.VK_E, vtinput.VK_R, vtinput.VK_T, vtinput.VK_Y, vtinput.VK_U, vtinput.VK_I, vtinput.VK_O, vtinput.VK_P, vtinput.VK_OEM_4, vtinput.VK_OEM_6, vtinput.VK_OEM_5, _nav, vtinput.VK_DELETE, vtinput.VK_END, vtinput.VK_NEXT, _num, vtinput.VK_NUMPAD7, vtinput.VK_NUMPAD8, vtinput.VK_NUMPAD9, vtinput.VK_ADD},
+	{vtinput.VK_CAPITAL, vtinput.VK_A, vtinput.VK_S, vtinput.VK_D, vtinput.VK_F, vtinput.VK_G, vtinput.VK_H, vtinput.VK_J, vtinput.VK_K, vtinput.VK_L, vtinput.VK_OEM_1, vtinput.VK_OEM_7, vtinput.VK_RETURN, _num, vtinput.VK_NUMPAD4, vtinput.VK_NUMPAD5, vtinput.VK_NUMPAD6},
+	{vtinput.VK_LSHIFT, vtinput.VK_OEM_102, vtinput.VK_Z, vtinput.VK_X, vtinput.VK_C, vtinput.VK_V, vtinput.VK_B, vtinput.VK_N, vtinput.VK_M, vtinput.VK_OEM_COMMA, vtinput.VK_OEM_PERIOD, vtinput.VK_OEM_2, vtinput.VK_RSHIFT, _up, vtinput.VK_UP, _num, vtinput.VK_NUMPAD1, vtinput.VK_NUMPAD2, vtinput.VK_NUMPAD3, vtinput.VK_RETURN},
+	{vtinput.VK_LCONTROL, vtinput.VK_LWIN, vtinput.VK_LMENU, vtinput.VK_SPACE, vtinput.VK_RMENU, vtinput.VK_RWIN, vtinput.VK_APPS, vtinput.VK_RCONTROL, _nav, vtinput.VK_LEFT, vtinput.VK_DOWN, vtinput.VK_RIGHT, _num, vtinput.VK_NUMPAD0, _nDot, vtinput.VK_DECIMAL},
 }
 
 func main() {
@@ -169,9 +179,14 @@ func drawUI() {
 	fmt.Print("--- f4 Input Visualizer (Press Ctrl+C/Esc to exit) ---\r\n\r\n")
 
 	for _, row := range keyRows {
+		col := 0
 		for _, vk := range row {
-			if vk == 0 {
-				fmt.Print("    ")
+			if vk >= 0xFF00 {
+				targetCol := int(vk - 0xFF00)
+				for col < targetCol {
+					fmt.Print(" ")
+					col++
+				}
 				continue
 			}
 
@@ -202,6 +217,7 @@ func drawUI() {
 			} else {
 				fmt.Printf("[%s] ", name)
 			}
+			col += len(name) + 3
 		}
 		fmt.Print("\r\n\r\n") // Double spacing for clarity
 	}
