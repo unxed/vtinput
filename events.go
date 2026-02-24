@@ -74,6 +74,11 @@ type InputEvent struct {
 
 // String implements the Stringer interface for easy debugging.
 func (e InputEvent) String() string {
+	legacyStr := ""
+	if e.IsLegacy {
+		legacyStr = " [Legacy]"
+	}
+
 	if e.Type == KeyEventType {
 		state := "UP"
 		if e.KeyDown {
@@ -87,8 +92,8 @@ func (e InputEvent) String() string {
 				charStr = fmt.Sprintf(" Char:'%c'", e.Char)
 			}
 		}
-		return fmt.Sprintf("Key{VK:0x%X Scan:0x%X%s %s Mods:0x%X}",
-			e.VirtualKeyCode, e.VirtualScanCode, charStr, state, e.ControlKeyState)
+		return fmt.Sprintf("Key{VK:0x%X Scan:0x%X%s %s Mods:0x%X}%s",
+			e.VirtualKeyCode, e.VirtualScanCode, charStr, state, e.ControlKeyState, legacyStr)
 	}
 
 	if e.Type == MouseEventType {
@@ -118,9 +123,9 @@ func (e InputEvent) String() string {
 			wheel = " WHEEL_DOWN"
 		}
 
-		return fmt.Sprintf("Mouse{Pos:%d,%d Btn:%s %s%s Mods:0x%X}",
-			e.MouseX, e.MouseY, btn, action, wheel, e.ControlKeyState)
+		return fmt.Sprintf("Mouse{Pos:%d,%d Btn:%s %s%s Mods:0x%X}%s",
+			e.MouseX, e.MouseY, btn, action, wheel, e.ControlKeyState, legacyStr)
 	}
 
-	return fmt.Sprintf("Event{Type:%d Mods:0x%X}", e.Type, e.ControlKeyState)
+	return fmt.Sprintf("Event{Type:%d Mods:0x%X}%s", e.Type, e.ControlKeyState, legacyStr)
 }
