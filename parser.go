@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 var (
@@ -258,6 +260,237 @@ func ParseMouseSGR(data []byte) (*InputEvent, int, error) {
 	if (pb & 4) != 0 { event.ControlKeyState |= ShiftPressed }
 	if (pb & 8) != 0 { event.ControlKeyState |= LeftAltPressed }
 	if (pb & 16) != 0 { event.ControlKeyState |= LeftCtrlPressed }
+
+	return event, terminatorIdx + 1, nil
+}
+// ParseKitty handles the Kitty Keyboard Protocol sequence format.
+// Based on far2l's robust parsing logic and workarounds.
+func ParseKitty(data []byte) (*InputEvent, int, error) {
+	terminatorIdx, command, err := scanCSI(data)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	validTerm := false
+	switch command {
+	case 'u', '~', 'A', 'B', 'C', 'D', 'E', 'F', 'H', 'P', 'Q', 'R', 'S':
+		validTerm = true
+	}
+	if !validTerm {
+		return nil, 0, ErrInvalidSequence
+	}
+
+	paramStr := string(data[2:terminatorIdx])
+
+	var params [2][3]int
+	firstCount := 0
+	secondCount := 0
+
+	i := 0
+	for i < len(paramStr) {
+		if paramStr[i] == ';' {
+			secondCount = 0
+			firstCount++
+			if firstCount >= 2 {
+				return nil, 0, ErrInvalidSequence
+			}
+			i++
+		} else if paramStr[i] == ':' {
+			secondCount++
+			if secondCount >= 3 {
+				return nil, 0, ErrInvalidSequence
+			}
+			i++
+		} else if paramStr[i] >= '0' && paramStr[i] <= '9' {
+			val := 0
+			for i < len(paramStr) && paramStr[i] >= '0' && paramStr[i] <= '9' {
+				val = val*10 + int(paramStr[i]-'0')
+				i++
+			}
+			params[firstCount][secondCount] = val
+		} else {
+			return nil, 0, ErrInvalidSequence
+		}
+	}
+
+	eventType := params[1][1]
+	modifState := params[1][0]
+
+	event := &InputEvent{
+		Type: KeyEventType,
+	}
+
+	if modifState > 0 {
+		modifState--
+		if (modifState & 1) != 0 { event.ControlKeyState |= ShiftPressed }
+		if (modifState & 2) != 0 { event.ControlKeyState |= LeftAltPressed }
+		if (modifState & 4) != 0 { event.ControlKeyState |= LeftCtrlPressed }
+		if (modifState & 8) != 0 { event.ControlKeyState |= LeftCtrlPressed } // Super -> Ctrl (macOS compat)
+		if (modifState & 64) != 0 { event.ControlKeyState |= CapsLockOn }
+		if (modifState & 128) != 0 { event.ControlKeyState |= NumLockOn }
+	}
+
+	baseChar := params[0][2]
+	if baseChar == 0 {
+		baseChar = params[0][0]
+	}
+
+	// fix for xterm in ModifyOtherKeys=2 formatOtherKeys=1 mode
+	if baseChar <= 255 && baseChar >= 'A' && baseChar <= 'Z' {
+		baseChar = int(unicode.ToLower(rune(baseChar)))
+	}
+
+	if baseChar <= 255 && baseChar >= 'a' && baseChar <= 'z' {
+		event.VirtualKeyCode = uint16(baseChar - 'a' + 0x41)
+	}
+	if baseChar <= 255 && baseChar >= '0' && baseChar <= '9' {
+		event.VirtualKeyCode = uint16(baseChar - '0' + 0x30)
+	}
+
+	switch baseChar {
+	case '`': event.VirtualKeyCode = VK_OEM_3
+	case '-': event.VirtualKeyCode = VK_OEM_MINUS
+	case '=': event.VirtualKeyCode = VK_OEM_PLUS
+	case '[': event.VirtualKeyCode = VK_OEM_4
+	case ']': event.VirtualKeyCode = VK_OEM_6
+	case '\\': event.VirtualKeyCode = VK_OEM_5
+	case ';': event.VirtualKeyCode = VK_OEM_1
+	case '\'': event.VirtualKeyCode = VK_OEM_7
+	case ',': event.VirtualKeyCode = VK_OEM_COMMA
+	case '.': event.VirtualKeyCode = VK_OEM_PERIOD
+	case '/': event.VirtualKeyCode = VK_OEM_2
+	case 9: event.VirtualKeyCode = VK_TAB
+	case 27: event.VirtualKeyCode = VK_ESCAPE
+	case 13:
+		if command == '~' {
+			event.VirtualKeyCode = VK_F3 // workaround for wezterm #3473
+		} else {
+			event.VirtualKeyCode = VK_RETURN
+		}
+	case 127: event.VirtualKeyCode = VK_BACK
+	case 2:
+		if command == '~' { event.VirtualKeyCode = VK_INSERT }
+	case 3:
+		if command == '~' { event.VirtualKeyCode = VK_DELETE }
+	case 5:
+		if command == '~' { event.VirtualKeyCode = VK_PRIOR; event.ControlKeyState |= EnhancedKey }
+	case 6:
+		if command == '~' { event.VirtualKeyCode = VK_NEXT; event.ControlKeyState |= EnhancedKey }
+	case 8:
+		if command == 'u' { event.VirtualKeyCode = VK_BACK } // workaround for wezterm #3594
+	case 11:
+		if command == '~' { event.VirtualKeyCode = VK_F1 }
+	case 12:
+		if command == '~' { event.VirtualKeyCode = VK_F2 }
+	case 14:
+		if command == '~' { event.VirtualKeyCode = VK_F4 }
+	case 15:
+		if command == '~' { event.VirtualKeyCode = VK_F5 }
+	case 17:
+		if command == '~' { event.VirtualKeyCode = VK_F6 }
+	case 18:
+		if command == '~' { event.VirtualKeyCode = VK_F7 }
+	case 19:
+		if command == '~' { event.VirtualKeyCode = VK_F8 }
+	case 20:
+		if command == '~' { event.VirtualKeyCode = VK_F9 }
+	case 21:
+		if command == '~' { event.VirtualKeyCode = VK_F10 }
+	case 23:
+		if command == '~' { event.VirtualKeyCode = VK_F11 }
+	case 24:
+		if command == '~' { event.VirtualKeyCode = VK_F12 }
+	case 32: event.VirtualKeyCode = VK_SPACE
+	case 57399, 57425: event.VirtualKeyCode = VK_NUMPAD0
+	case 57400, 57424: event.VirtualKeyCode = VK_NUMPAD1
+	case 57401, 57420: event.VirtualKeyCode = VK_NUMPAD2
+	case 57402, 57422: event.VirtualKeyCode = VK_NUMPAD3
+	case 57403, 57417: event.VirtualKeyCode = VK_NUMPAD4
+	case 57404, 57427: event.VirtualKeyCode = VK_NUMPAD5
+	case 57405, 57418: event.VirtualKeyCode = VK_NUMPAD6
+	case 57406, 57423: event.VirtualKeyCode = VK_NUMPAD7
+	case 57407, 57419: event.VirtualKeyCode = VK_NUMPAD8
+	case 57408, 57421: event.VirtualKeyCode = VK_NUMPAD9
+	case 57409, 57426: event.VirtualKeyCode = VK_DECIMAL
+	case 57410: event.VirtualKeyCode = VK_DIVIDE
+	case 57411: event.VirtualKeyCode = VK_MULTIPLY
+	case 57412: event.VirtualKeyCode = VK_SUBTRACT
+	case 57413: event.VirtualKeyCode = VK_ADD
+	case 57414: event.VirtualKeyCode = VK_RETURN
+	case 57444: event.VirtualKeyCode = VK_LWIN
+	case 57450: event.VirtualKeyCode = VK_RWIN
+	case 57363: event.VirtualKeyCode = VK_APPS
+	case 57448: // Right Ctrl
+		event.VirtualKeyCode = VK_CONTROL
+		if eventType != 3 { event.ControlKeyState |= RightCtrlPressed | EnhancedKey }
+	case 57442: // Left Ctrl
+		event.VirtualKeyCode = VK_CONTROL
+		if eventType != 3 { event.ControlKeyState |= LeftCtrlPressed }
+	case 57443: // Left Alt
+		event.VirtualKeyCode = VK_MENU
+		if eventType != 3 { event.ControlKeyState |= LeftAltPressed }
+	case 57449: // Right Alt
+		event.VirtualKeyCode = VK_MENU
+		if eventType != 3 { event.ControlKeyState |= RightAltPressed | EnhancedKey }
+	case 57441: // Left Shift
+		event.VirtualKeyCode = VK_SHIFT
+		if eventType != 3 { event.ControlKeyState |= ShiftPressed }
+	case 57447: // Right Shift
+		event.VirtualKeyCode = VK_SHIFT
+		if eventType != 3 { event.ControlKeyState |= ShiftPressed }
+	case 57360: event.VirtualKeyCode = VK_NUMLOCK
+	case 57358: event.VirtualKeyCode = VK_CAPITAL
+	}
+
+	switch command {
+	case 'A': event.VirtualKeyCode = VK_UP; event.ControlKeyState |= EnhancedKey
+	case 'B': event.VirtualKeyCode = VK_DOWN; event.ControlKeyState |= EnhancedKey
+	case 'C': event.VirtualKeyCode = VK_RIGHT; event.ControlKeyState |= EnhancedKey
+	case 'D': event.VirtualKeyCode = VK_LEFT; event.ControlKeyState |= EnhancedKey
+	case 'E': event.VirtualKeyCode = VK_CLEAR // NumPad center (5)
+	case 'H': event.VirtualKeyCode = VK_HOME; event.ControlKeyState |= EnhancedKey
+	case 'F': event.VirtualKeyCode = VK_END; event.ControlKeyState |= EnhancedKey
+	case 'P': event.VirtualKeyCode = VK_F1
+	case 'Q': event.VirtualKeyCode = VK_F2
+	case 'R': event.VirtualKeyCode = VK_F3
+	case 'S': event.VirtualKeyCode = VK_F4
+	}
+
+	uc := params[0][1]
+	if uc == 0 {
+		uc = params[0][0]
+	}
+
+	if uc < 32 || uc == 127 || (uc >= 57358 && uc <= 57454) {
+		uc = 0
+	}
+
+	if uc > 0 && utf8.ValidRune(rune(uc)) {
+		event.Char = rune(uc)
+	} else {
+		event.Char = 0
+	}
+
+	if event.Char > 0 && event.VirtualKeyCode == 0 {
+		event.VirtualKeyCode = VK_UNASSIGNED
+	}
+
+	if (event.ControlKeyState & CapsLockOn) != 0 && (event.ControlKeyState & ShiftPressed) == 0 {
+		event.Char = unicode.ToUpper(event.Char)
+	}
+
+	event.KeyDown = (eventType != 3)
+	event.RepeatCount = 1
+
+	if (event.ControlKeyState & LeftAltPressed) != 0 || (event.ControlKeyState & RightAltPressed) != 0 {
+		switch event.VirtualKeyCode {
+		case VK_ESCAPE, VK_DELETE, VK_BACK, VK_TAB, VK_RETURN, VK_SPACE:
+		default:
+			if event.Char > 0 {
+				event.Char = unicode.ToUpper(event.Char)
+			}
+		}
+	}
 
 	return event, terminatorIdx + 1, nil
 }

@@ -174,4 +174,6 @@ const (
 	VK_NONAME     = 0xFC
 	VK_PA1        = 0xFD
 	VK_OEM_CLEAR  = 0xFE
+
+	VK_UNASSIGNED = 0xFF
 )

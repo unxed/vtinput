@@ -6,10 +6,13 @@ import (
 	"golang.org/x/term"
 )
 
-// Win32 Input Mode sequences
+// Win32 Input Mode & Kitty Protocol sequences
 const (
 	seqEnableWin32  = "\x1b[?9001h"
 	seqDisableWin32 = "\x1b[?9001l"
+
+	seqEnableKitty  = "\x1b[>15u"
+	seqDisableKitty = "\x1b[<1u"
 
 	// 1003: Any event mouse (motion + buttons), 1006: SGR extended mode
 	seqEnableMouse  = "\x1b[?1003h\x1b[?1006h"
@@ -35,14 +38,14 @@ func Enable() (func(), error) {
 	}
 
 	// 3. Send activation sequences
-	if _, err := os.Stdout.WriteString(seqEnableWin32 + seqEnableMouse); err != nil {
+	if _, err := os.Stdout.WriteString(seqEnableKitty + seqEnableWin32 + seqEnableMouse); err != nil {
 		term.Restore(fd, oldState)
 		return nil, err
 	}
 
 	// 4. Create the restore function (closure)
 	restore := func() {
-		os.Stdout.WriteString(seqDisableMouse + seqDisableWin32)
+		os.Stdout.WriteString(seqDisableMouse + seqDisableWin32 + seqDisableKitty)
 		term.Restore(fd, oldState)
 	}
 

@@ -69,13 +69,13 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 					switch command {
 					case '_': // Win32 Input Mode
 						event, consumed, pErr = ParseWin32InputEvent(r.buf)
-					case 'u': // Future Kitty Keyboard Protocol
-						// event, consumed, pErr = ParseKitty(r.buf)
-						event, consumed, pErr = ParseLegacyCSI(r.buf)
 					case 'M', 'm': // SGR Mouse
 						event, consumed, pErr = ParseMouseSGR(r.buf)
-					default: // Standard Arrows, F-keys, etc.
-						event, consumed, pErr = ParseLegacyCSI(r.buf)
+					default: // Kitty Protocol or Legacy CSI
+						event, consumed, pErr = ParseKitty(r.buf)
+						if pErr == ErrInvalidSequence {
+							event, consumed, pErr = ParseLegacyCSI(r.buf)
+						}
 					}
 
 					if pErr == nil && event != nil {
