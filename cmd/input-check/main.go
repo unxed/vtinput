@@ -4,69 +4,161 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/unxed/vtinput"
 )
 
+// activeKey holds state for a pressed key
+type activeKey struct {
+	pressedAt time.Time
+	isLegacy  bool
+}
+
+var (
+	mu         sync.Mutex
+	pressedKeys = make(map[uint16]activeKey)
+	logLines    []string
+	logLimit    = 10
+)
+
+// Keyboard layout rows for visualization
+var keyRows = [][]uint16{
+	{vtinput.VK_ESCAPE, vtinput.VK_F1, vtinput.VK_F2, vtinput.VK_F3, vtinput.VK_F4, vtinput.VK_F5, vtinput.VK_F6, vtinput.VK_F7, vtinput.VK_F8, vtinput.VK_F9, vtinput.VK_F10, vtinput.VK_F11, vtinput.VK_F12},
+	{vtinput.VK_OEM_3, vtinput.VK_1, vtinput.VK_2, vtinput.VK_3, vtinput.VK_4, vtinput.VK_5, vtinput.VK_6, vtinput.VK_7, vtinput.VK_8, vtinput.VK_9, vtinput.VK_0, vtinput.VK_OEM_MINUS, vtinput.VK_OEM_PLUS, vtinput.VK_BACK},
+	{vtinput.VK_TAB, vtinput.VK_Q, vtinput.VK_W, vtinput.VK_E, vtinput.VK_R, vtinput.VK_T, vtinput.VK_Y, vtinput.VK_U, vtinput.VK_I, vtinput.VK_O, vtinput.VK_P, vtinput.VK_OEM_4, vtinput.VK_OEM_6, vtinput.VK_OEM_5},
+	{vtinput.VK_CAPITAL, vtinput.VK_A, vtinput.VK_S, vtinput.VK_D, vtinput.VK_F, vtinput.VK_G, vtinput.VK_H, vtinput.VK_J, vtinput.VK_K, vtinput.VK_L, vtinput.VK_OEM_1, vtinput.VK_OEM_7, vtinput.VK_RETURN},
+	{vtinput.VK_LSHIFT, vtinput.VK_OEM_102, vtinput.VK_Z, vtinput.VK_X, vtinput.VK_C, vtinput.VK_V, vtinput.VK_B, vtinput.VK_N, vtinput.VK_M, vtinput.VK_OEM_COMMA, vtinput.VK_OEM_PERIOD, vtinput.VK_OEM_2, vtinput.VK_RSHIFT},
+	{vtinput.VK_LCONTROL, vtinput.VK_LMENU, vtinput.VK_SPACE, vtinput.VK_RMENU, vtinput.VK_RCONTROL, vtinput.VK_LEFT, vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_RIGHT},
+	{vtinput.VK_INSERT, vtinput.VK_HOME, vtinput.VK_PRIOR, vtinput.VK_DELETE, vtinput.VK_END, vtinput.VK_NEXT},
+}
+
 func main() {
-	// 1. Включаем Win32 Input Mode и Raw Mode
 	restore, err := vtinput.Enable()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error enabling input mode: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	// Гарантируем, что при выходе терминал вернется в норму
 	defer restore()
 
-	fmt.Print("Win32 Input Mode Enabled (vtinput).\r\n")
-	fmt.Print("Нажимай клавиши (Ctrl, Alt, стрелки, сочетания).\r\n")
-	fmt.Print("Для выхода нажми Ctrl+C или Esc.\r\n")
-	fmt.Print("------------------------------------------------\r\n")
+	// Clear screen and hide cursor
+	fmt.Print("\033[2J\033[?25l")
+	defer fmt.Print("\033[?25h") // Show cursor on exit
 
-	// 2. Создаем Reader для ввода
 	reader := vtinput.NewReader(os.Stdin)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	// Initial draw
+	drawUI()
+
+	// Event channel to bridge reader and select loop
+	eventChan := make(chan *vtinput.InputEvent)
+	go func() {
+		for {
+			e, err := reader.ReadEvent()
+			if err != nil {
+				if err != io.EOF {
+					// In a real app we might handle error, here just exit loop
+				}
+				return
+			}
+			eventChan <- e
+		}
+	}()
 
 	for {
-		// 3. Читаем следующее событие (блокирующий вызов)
-		event, err := reader.ReadEvent()
-		if err != nil {
-			if err != io.EOF {
-				fmt.Printf("Read error: %v\r\n", err)
+		select {
+		case e := <-eventChan:
+			handleEvent(e)
+			if isExitEvent(e) {
+				return
 			}
-			break
-		}
+			drawUI()
 
-		// 4. Выводим распознанное событие
-		fmt.Printf("Event: %s\r\n", event)
-
-		// 5. Проверка на выход
-		if isExitEvent(event) {
-			fmt.Print("Exiting...\r\n")
-			return
+		case <-ticker.C:
+			// Cleanup legacy keys that "timed out"
+			mu.Lock()
+			changed := false
+			now := time.Now()
+			for k, v := range pressedKeys {
+				if v.isLegacy && now.Sub(v.pressedAt) > 150*time.Millisecond {
+					delete(pressedKeys, k)
+					changed = true
+				}
+			}
+			mu.Unlock()
+			if changed {
+				drawUI()
+			}
 		}
 	}
 }
 
-// isExitEvent проверяет, нажали ли Ctrl+C или Esc
-func isExitEvent(e *vtinput.InputEvent) bool {
-	// Нас интересует только нажатие (KeyDown = true)
-	if !e.KeyDown {
-		return false
+func handleEvent(e *vtinput.InputEvent) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Log message
+	msg := fmt.Sprintf("Event: %s", e)
+	logLines = append(logLines, msg)
+	if len(logLines) > logLimit {
+		logLines = logLines[1:]
 	}
 
-	// Esc
-	if e.VirtualKeyCode == vtinput.VK_ESCAPE {
-		return true
-	}
-
-	// Ctrl + C
-	if e.VirtualKeyCode == vtinput.VK_C {
-		// Проверяем битовую маску модификаторов
-		ctrlPressed := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-		if ctrlPressed {
-			return true
+	if e.Type == vtinput.KeyEventType {
+		if e.KeyDown {
+			pressedKeys[e.VirtualKeyCode] = activeKey{
+				pressedAt: time.Now(),
+				isLegacy:  e.IsLegacy,
+			}
+		} else {
+			delete(pressedKeys, e.VirtualKeyCode)
 		}
 	}
+}
 
+func drawUI() {
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Move to top-left
+	fmt.Print("\033[H")
+
+	fmt.Println("--- f4 Input Visualizer (Press Ctrl+C/Esc to exit) ---")
+	fmt.Println("")
+
+	for _, row := range keyRows {
+		for _, vk := range row {
+			name, ok := vkNames[vk]
+			if !ok {
+				name = fmt.Sprintf("0x%X", vk)
+			}
+
+			// Check if pressed
+			if _, pressed := pressedKeys[vk]; pressed {
+				// Green background for pressed keys
+				fmt.Printf("\033[42;30m %s \033[0m ", name)
+			} else {
+				fmt.Printf("[%s] ", name)
+			}
+		}
+		fmt.Print("\r\n\r\n") // Double spacing for clarity
+	}
+
+	fmt.Println("---------------- Log ----------------")
+	for _, line := range logLines {
+		// Clear line before printing
+		fmt.Printf("\033[K%s\r\n", line)
+	}
+	// Clear rest of screen below
+	fmt.Print("\033[J")
+}
+
+func isExitEvent(e *vtinput.InputEvent) bool {
+	if !e.KeyDown { return false }
+	if e.VirtualKeyCode == vtinput.VK_ESCAPE { return true }
+	if e.VirtualKeyCode == vtinput.VK_C && (e.ControlKeyState&vtinput.LeftCtrlPressed) != 0 { return true }
 	return false
 }

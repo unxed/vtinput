@@ -145,6 +145,7 @@ func ParseLegacyCSI(data []byte) (*InputEvent, int, error) {
 		Type:            KeyEventType,
 		KeyDown:         true,
 		ControlKeyState: decodeAnsiModifiers(getParam(1, 1)),
+		IsLegacy:        true,
 	}
 
 	if command == '~' {
@@ -176,8 +177,9 @@ func ParseLegacySS3(data []byte) (*InputEvent, int, error) {
 	}
 
 	event := &InputEvent{
-		Type:    KeyEventType,
-		KeyDown: true,
+		Type:     KeyEventType,
+		KeyDown:  true,
+		IsLegacy: true,
 	}
 
 	switch data[2] {

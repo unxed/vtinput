@@ -103,6 +103,7 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 						Char:            character,
 						ControlKeyState: LeftAltPressed,
 						KeyDown:         true,
+						IsLegacy:        true,
 					}, nil
 				}
 
@@ -136,7 +137,7 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 			// 6. Single byte / UTF-8 / Ctrl-keys / Backspace (0x7F)
 			if r.buf[0] == 0x7F {
 				r.buf = r.buf[1:]
-				return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_BACK, KeyDown: true}, nil
+				return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_BACK, KeyDown: true, IsLegacy: true}, nil
 			}
 
 			if utf8.FullRune(r.buf) {
@@ -145,7 +146,7 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 				if event := translateLegacyByte(character); event != nil {
 					return event, nil
 				}
-				return &InputEvent{Type: KeyEventType, Char: character, KeyDown: true}, nil
+				return &InputEvent{Type: KeyEventType, Char: character, KeyDown: true, IsLegacy: true}, nil
 			}
 		}
 
@@ -174,35 +175,50 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 // translateLegacyByte converts C0 control characters (0x01-0x1A)
 // to InputEvents with VirtualKeyCodes and Ctrl modifier.
 func translateLegacyByte(r rune) *InputEvent {
+	evt := &InputEvent{Type: KeyEventType, KeyDown: true, IsLegacy: true}
 	switch r {
-	case 0x00: // Ctrl + Space
-		return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_SPACE, Char: ' ', ControlKeyState: LeftCtrlPressed, KeyDown: true}
-	case 0x08: // Backspace (Ctrl + H)
-		return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_BACK, KeyDown: true}
-	case 0x09: // Tab
-		return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_TAB, Char: '\t', KeyDown: true}
-	case 0x0D: // Enter
-		return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_RETURN, Char: '\r', KeyDown: true}
-	case 0x1B: // Esc
-		return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_ESCAPE, KeyDown: true}
-	case 0x1C: // Ctrl + \
-		return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_OEM_5, ControlKeyState: LeftCtrlPressed, KeyDown: true}
-	case 0x1D: // Ctrl + ]
-		return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_OEM_6, ControlKeyState: LeftCtrlPressed, KeyDown: true}
-	case 0x1E: // Ctrl + ^ (6)
-		return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_6, ControlKeyState: LeftCtrlPressed, KeyDown: true}
-	case 0x1F: // Ctrl + _ (-)
-		return &InputEvent{Type: KeyEventType, VirtualKeyCode: VK_OEM_MINUS, ControlKeyState: LeftCtrlPressed, KeyDown: true}
+	case 0x00:
+		evt.VirtualKeyCode = VK_SPACE
+		evt.Char = ' '
+		evt.ControlKeyState = LeftCtrlPressed
+		return evt
+	case 0x08:
+		evt.VirtualKeyCode = VK_BACK
+		return evt
+	case 0x09:
+		evt.VirtualKeyCode = VK_TAB
+		evt.Char = '\t'
+		return evt
+	case 0x0D:
+		evt.VirtualKeyCode = VK_RETURN
+		evt.Char = '\r'
+		return evt
+	case 0x1B:
+		evt.VirtualKeyCode = VK_ESCAPE
+		return evt
+	case 0x1C:
+		evt.VirtualKeyCode = VK_OEM_5
+		evt.ControlKeyState = LeftCtrlPressed
+		return evt
+	case 0x1D:
+		evt.VirtualKeyCode = VK_OEM_6
+		evt.ControlKeyState = LeftCtrlPressed
+		return evt
+	case 0x1E:
+		evt.VirtualKeyCode = VK_6
+		evt.ControlKeyState = LeftCtrlPressed
+		return evt
+	case 0x1F:
+		evt.VirtualKeyCode = VK_OEM_MINUS
+		evt.ControlKeyState = LeftCtrlPressed
+		return evt
 	}
 
-	// Ctrl+A is 1, Ctrl+Z is 26 (excluding handled above)
+	// Ctrl+A is 1, Ctrl+Z is 26
 	if r >= 1 && r <= 26 {
-		return &InputEvent{
-			Type:            KeyEventType,
-			VirtualKeyCode:  uint16(VK_A + (r - 1)),
-			ControlKeyState: LeftCtrlPressed,
-			KeyDown:         true,
-		}
+		evt.VirtualKeyCode = uint16(VK_A + (r - 1))
+		evt.ControlKeyState = LeftCtrlPressed
+		return evt
 	}
 	return nil
 }

@@ -65,6 +65,11 @@ type InputEvent struct {
 
 	// Shared
 	ControlKeyState uint32
+
+	// IsLegacy indicates that this event comes from a protocol that does not support
+	// explicit KeyUp events (e.g. standard ANSI). The application may need to
+	// simulate KeyUp after a timeout.
+	IsLegacy bool
 }
 
 // String implements the Stringer interface for easy debugging.
