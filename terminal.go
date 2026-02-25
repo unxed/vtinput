@@ -22,34 +22,64 @@ const (
 	seqEnableExt  = "\x1b[?1004h\x1b[?2004h"
 	seqDisableExt = "\x1b[?2004l\x1b[?1004l"
 )
+// Protocol flags to selectively enable features.
+type Protocol uint32
 
-// Enable puts the terminal into Raw Mode and enables Win32 Input Mode.
-// It returns a restore function that MUST be called before the program exits.
-//
-// Usage:
-//   restore, err := vtinput.Enable()
-//   if err != nil { panic(err) }
-//   defer restore()
+const (
+	Win32InputMode Protocol = 1 << iota
+	KittyKeyboard
+	MouseSupport
+	FocusAndPaste
+
+	// DefaultProtocols enables all supported features.
+	DefaultProtocols = Win32InputMode | KittyKeyboard | MouseSupport | FocusAndPaste
+)
+
+// Enable puts the terminal into Raw Mode and enables all supported protocols.
 func Enable() (func(), error) {
+	return EnableProtocols(DefaultProtocols)
+}
+
+// EnableProtocols puts the terminal into Raw Mode and enables specific protocols.
+func EnableProtocols(p Protocol) (func(), error) {
 	// 1. Get the file descriptor of Stdin (usually 0)
 	fd := int(os.Stdin.Fd())
 
 	// 2. Put terminal in Raw Mode
-	// This disables echo and canonical mode (line buffering).
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Send activation sequences
-	if _, err := os.Stdout.WriteString(seqEnableKitty + seqEnableWin32 + seqEnableMouse + seqEnableExt); err != nil {
+	// 3. Build activation and deactivation strings
+	var enableSeq, disableSeq string
+
+	if p&KittyKeyboard != 0 {
+		enableSeq += seqEnableKitty
+		disableSeq = seqDisableKitty + disableSeq // LIFO order for restore is good practice
+	}
+	if p&Win32InputMode != 0 {
+		enableSeq += seqEnableWin32
+		disableSeq = seqDisableWin32 + disableSeq
+	}
+	if p&MouseSupport != 0 {
+		enableSeq += seqEnableMouse
+		disableSeq = seqDisableMouse + disableSeq
+	}
+	if p&FocusAndPaste != 0 {
+		enableSeq += seqEnableExt
+		disableSeq = seqDisableExt + disableSeq
+	}
+
+	// 4. Send activation sequences
+	if _, err := os.Stdout.WriteString(enableSeq); err != nil {
 		term.Restore(fd, oldState)
 		return nil, err
 	}
 
-	// 4. Create the restore function (closure)
+	// 5. Create the restore function
 	restore := func() {
-		os.Stdout.WriteString(seqDisableExt + seqDisableMouse + seqDisableWin32 + seqDisableKitty)
+		os.Stdout.WriteString(disableSeq)
 		term.Restore(fd, oldState)
 	}
 

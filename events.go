@@ -51,6 +51,7 @@ type InputEvent struct {
 	VirtualKeyCode  uint16
 	VirtualScanCode uint16
 	Char            rune
+	UnshiftedChar   rune
 	KeyDown         bool
 	RepeatCount     uint16
 
@@ -96,8 +97,18 @@ func (e InputEvent) String() string {
 				charStr = fmt.Sprintf(" Char:'%c'", e.Char)
 			}
 		}
-		return fmt.Sprintf("Key{VK:0x%X Scan:0x%X%s %s Mods:0x%X}%s",
-			e.VirtualKeyCode, e.VirtualScanCode, charStr, state, e.ControlKeyState, legacyStr)
+
+		baseStr := ""
+		if e.UnshiftedChar > 0 {
+			if e.UnshiftedChar < 32 {
+				baseStr = fmt.Sprintf(" Base:\\x%02X", e.UnshiftedChar)
+			} else {
+				baseStr = fmt.Sprintf(" Base:'%c'", e.UnshiftedChar)
+			}
+		}
+
+		return fmt.Sprintf("Key{VK:0x%X Scan:0x%X%s%s %s Mods:0x%X}%s",
+			e.VirtualKeyCode, e.VirtualScanCode, charStr, baseStr, state, e.ControlKeyState, legacyStr)
 	}
 
 	if e.Type == MouseEventType {

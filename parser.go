@@ -320,6 +320,10 @@ func ParseKitty(data []byte) (*InputEvent, int, error) {
 		Type: KeyEventType,
 	}
 
+	if params[0][0] > 0 {
+		event.UnshiftedChar = rune(params[0][0])
+	}
+
 	if modifState > 0 {
 		modifState--
 		if (modifState & 1) != 0 { event.ControlKeyState |= ShiftPressed }
