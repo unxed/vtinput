@@ -438,9 +438,11 @@ func ParseKitty(data []byte) (*InputEvent, int, error) {
 		if eventType != 3 { event.ControlKeyState |= RightAltPressed | EnhancedKey }
 	case 57441: // Left Shift
 		event.VirtualKeyCode = VK_SHIFT
+		event.VirtualScanCode = ScanCodeLeftShift
 		if eventType != 3 { event.ControlKeyState |= ShiftPressed }
 	case 57447: // Right Shift
 		event.VirtualKeyCode = VK_SHIFT
+		event.VirtualScanCode = ScanCodeRightShift
 		if eventType != 3 { event.ControlKeyState |= ShiftPressed }
 	case 57360: event.VirtualKeyCode = VK_NUMLOCK
 	case 57358: event.VirtualKeyCode = VK_CAPITAL

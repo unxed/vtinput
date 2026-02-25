@@ -167,16 +167,26 @@ func handleEvent(e *vtinput.InputEvent) {
 	}
 
 	if e.Type == vtinput.KeyEventType {
+		vk := e.VirtualKeyCode
+		// Disambiguate Shift keys based on ScanCode (common in Win32/Kitty)
+		if vk == vtinput.VK_SHIFT {
+			if e.VirtualScanCode == vtinput.ScanCodeLeftShift {
+				vk = vtinput.VK_LSHIFT
+			} else if e.VirtualScanCode == vtinput.ScanCodeRightShift {
+				vk = vtinput.VK_RSHIFT
+			}
+		}
+
 		if e.KeyDown {
-			pressedKeys[e.VirtualKeyCode] = activeKey{
+			pressedKeys[vk] = activeKey{
 				pressedAt: time.Now(),
 				isLegacy:  e.IsLegacy,
 				isDown:    true,
 			}
 		} else {
-			if ak, ok := pressedKeys[e.VirtualKeyCode]; ok {
+			if ak, ok := pressedKeys[vk]; ok {
 				ak.isDown = false
-				pressedKeys[e.VirtualKeyCode] = ak
+				pressedKeys[vk] = ak
 			}
 		}
 	}
@@ -190,6 +200,11 @@ func drawUI() {
 	fmt.Print("\033[H")
 
 	fmt.Print("--- f4 Input Visualizer (Press Ctrl+C/Esc to exit) ---\r\n\r\n")
+
+	// Determine if we have specific shift keys pressed to avoid generic modifier fallback
+	shiftInMap := false
+	if _, ok := pressedKeys[vtinput.VK_LSHIFT]; ok { shiftInMap = true }
+	if _, ok := pressedKeys[vtinput.VK_RSHIFT]; ok { shiftInMap = true }
 
 	for _, row := range keyRows {
 		col := 0
@@ -219,8 +234,14 @@ func drawUI() {
 			if vk == vtinput.VK_RCONTROL && (currentMods&vtinput.RightCtrlPressed) != 0 { isPressed = true }
 			if vk == vtinput.VK_LMENU && (currentMods&vtinput.LeftAltPressed) != 0 { isPressed = true }
 			if vk == vtinput.VK_RMENU && (currentMods&vtinput.RightAltPressed) != 0 { isPressed = true }
-			if vk == vtinput.VK_LSHIFT && (currentMods&vtinput.ShiftPressed) != 0 { isPressed = true }
-			if vk == vtinput.VK_RSHIFT && (currentMods&vtinput.ShiftPressed) != 0 { isPressed = true }
+
+			// For Shift, only use generic modifier if no specific shift key is detected in pressedKeys.
+			// This allows distinguishing LShift/RShift in modern protocols, while keeping support for legacy.
+			if !shiftInMap {
+				if vk == vtinput.VK_LSHIFT && (currentMods&vtinput.ShiftPressed) != 0 { isPressed = true }
+				if vk == vtinput.VK_RSHIFT && (currentMods&vtinput.ShiftPressed) != 0 { isPressed = true }
+			}
+
 			if vk == vtinput.VK_CAPITAL && (currentMods&vtinput.CapsLockOn) != 0 { isPressed = true }
 			if vk == vtinput.VK_NUMLOCK && (currentMods&vtinput.NumLockOn) != 0 { isPressed = true }
 

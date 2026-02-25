@@ -176,4 +176,7 @@ const (
 	VK_OEM_CLEAR  = 0xFE
 
 	VK_UNASSIGNED = 0xFF
+
+	ScanCodeLeftShift  = 0x2A
+	ScanCodeRightShift = 0x36
 )
