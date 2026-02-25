@@ -199,7 +199,7 @@ func drawUI() {
 	// Move to top-left
 	fmt.Print("\033[H")
 
-	fmt.Print("--- f4 Input Visualizer (Press Ctrl+C/Esc to exit) ---\r\n\r\n")
+	fmt.Print("--- vtinput input visualizer (press Ctrl+C/Esc to exit) ---\r\n\r\n")
 
 	// Determine if we have specific shift keys pressed to avoid generic modifier fallback
 	shiftInMap := false
