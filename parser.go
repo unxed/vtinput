@@ -426,7 +426,11 @@ func ParseKitty(data []byte) (*InputEvent, int, error) {
 	case 57363: event.VirtualKeyCode = VK_APPS
 	case 57448: // Right Ctrl
 		event.VirtualKeyCode = VK_CONTROL
-		if eventType != 3 { event.ControlKeyState |= RightCtrlPressed | EnhancedKey }
+		if eventType != 3 {
+			event.ControlKeyState |= RightCtrlPressed | EnhancedKey
+			// Generic modifiers logic defaults to LeftCtrl; clear it since we know it's Right.
+			event.ControlKeyState &= ^uint32(LeftCtrlPressed)
+		}
 	case 57442: // Left Ctrl
 		event.VirtualKeyCode = VK_CONTROL
 		if eventType != 3 { event.ControlKeyState |= LeftCtrlPressed }
@@ -435,7 +439,11 @@ func ParseKitty(data []byte) (*InputEvent, int, error) {
 		if eventType != 3 { event.ControlKeyState |= LeftAltPressed }
 	case 57449: // Right Alt
 		event.VirtualKeyCode = VK_MENU
-		if eventType != 3 { event.ControlKeyState |= RightAltPressed | EnhancedKey }
+		if eventType != 3 {
+			event.ControlKeyState |= RightAltPressed | EnhancedKey
+			// Generic modifiers logic defaults to LeftAlt; clear it since we know it's Right.
+			event.ControlKeyState &= ^uint32(LeftAltPressed)
+		}
 	case 57441: // Left Shift
 		event.VirtualKeyCode = VK_SHIFT
 		event.VirtualScanCode = ScanCodeLeftShift
