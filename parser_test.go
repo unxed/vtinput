@@ -99,7 +99,7 @@ func TestParseMouseSGR(t *testing.T) {
 	// 1. Left Button Press at 10,20
 	data := []byte("\x1b[<0;10;20M")
 	event, _, err := ParseMouseSGR(data)
-	if err != nil || event.MouseX != 10 || event.MouseY != 20 || event.ButtonState != FromLeft1stButtonPressed || !event.KeyDown {
+	if err != nil || event.MouseX != 9 || event.MouseY != 19 || event.ButtonState != FromLeft1stButtonPressed || !event.KeyDown {
 		t.Errorf("failed to parse Mouse SGR: got %+v, err %v", event, err)
 	}
 
@@ -145,6 +145,7 @@ func TestParseKitty(t *testing.T) {
 				Type:            KeyEventType,
 				VirtualKeyCode:  VK_A,
 				Char:            'a',
+				UnshiftedChar:   'a',
 				KeyDown:         true,
 				ControlKeyState: 0,
 				RepeatCount:     1,
@@ -157,6 +158,7 @@ func TestParseKitty(t *testing.T) {
 				Type:            KeyEventType,
 				VirtualKeyCode:  VK_A,
 				Char:            'a', // Parser keeps base char, app handles casing usually, but flags are set
+				UnshiftedChar:   'a',
 				KeyDown:         true,
 				ControlKeyState: ShiftPressed,
 				RepeatCount:     1,
@@ -169,6 +171,7 @@ func TestParseKitty(t *testing.T) {
 				Type:            KeyEventType,
 				VirtualKeyCode:  VK_A,
 				Char:            'a',
+				UnshiftedChar:   'a',
 				KeyDown:         true,
 				ControlKeyState: LeftCtrlPressed,
 				RepeatCount:     1,
@@ -181,6 +184,7 @@ func TestParseKitty(t *testing.T) {
 				Type:            KeyEventType,
 				VirtualKeyCode:  VK_A,
 				Char:            'a',
+				UnshiftedChar:   'a',
 				KeyDown:         true,
 				ControlKeyState: LeftCtrlPressed | ShiftPressed,
 				RepeatCount:     1,
@@ -193,6 +197,7 @@ func TestParseKitty(t *testing.T) {
 				Type:            KeyEventType,
 				VirtualKeyCode:  VK_A,
 				Char:            'a',
+				UnshiftedChar:   'a',
 				KeyDown:         false,
 				ControlKeyState: 0,
 				RepeatCount:     1,
@@ -205,6 +210,7 @@ func TestParseKitty(t *testing.T) {
 				Type:           KeyEventType,
 				VirtualKeyCode: VK_ESCAPE,
 				Char:           0,
+				UnshiftedChar:  27,
 				KeyDown:        true,
 				RepeatCount:    1,
 			},
@@ -216,6 +222,7 @@ func TestParseKitty(t *testing.T) {
 				Type:           KeyEventType,
 				VirtualKeyCode: VK_RETURN,
 				Char:           0,
+				UnshiftedChar:  13,
 				KeyDown:        true,
 				RepeatCount:    1,
 			},
@@ -227,6 +234,7 @@ func TestParseKitty(t *testing.T) {
 				Type:           KeyEventType,
 				VirtualKeyCode: VK_TAB,
 				Char:           0, // Tab char usually handled by app logic or VK mapping
+				UnshiftedChar:  9,
 				KeyDown:        true,
 				RepeatCount:    1,
 			},
@@ -238,6 +246,7 @@ func TestParseKitty(t *testing.T) {
 				Type:            KeyEventType,
 				VirtualKeyCode:  VK_UP,
 				Char:            0,
+				UnshiftedChar:   1,
 				KeyDown:         true,
 				ControlKeyState: ShiftPressed | EnhancedKey,
 				RepeatCount:     1,
@@ -250,6 +259,7 @@ func TestParseKitty(t *testing.T) {
 				Type:           KeyEventType,
 				VirtualKeyCode: VK_NUMPAD5,
 				Char:           0,
+				UnshiftedChar:  57404,
 				KeyDown:        true,
 				RepeatCount:    1,
 			},
@@ -261,6 +271,7 @@ func TestParseKitty(t *testing.T) {
 				Type:            KeyEventType,
 				VirtualKeyCode:  VK_F3,
 				Char:            0,
+				UnshiftedChar:   13,
 				KeyDown:         true,
 				ControlKeyState: ShiftPressed,
 				RepeatCount:     1,
@@ -273,6 +284,7 @@ func TestParseKitty(t *testing.T) {
 				Type:           KeyEventType,
 				VirtualKeyCode: VK_BACK,
 				Char:           0,
+				UnshiftedChar:  8,
 				KeyDown:        true,
 				RepeatCount:    1,
 			},
@@ -284,6 +296,7 @@ func TestParseKitty(t *testing.T) {
 				Type:            KeyEventType,
 				VirtualKeyCode:  VK_CONTROL,
 				Char:            0,
+				UnshiftedChar:   57448,
 				KeyDown:         true,
 				ControlKeyState: RightCtrlPressed | EnhancedKey,
 				RepeatCount:     1,
