@@ -152,7 +152,26 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 
 			if utf8.FullRune(r.buf) {
 				character, size := utf8.DecodeRune(r.buf)
-				r.buf = r.buf[size:]
+				consumed := size
+
+				// WORKAROUND for far2l TTY bug that sends '= ' for '=' keydown in legacy mode.
+				if character == '=' {
+					if len(r.buf) > size && r.buf[size] == ' ' {
+						consumed++
+					} else if len(r.buf) == size {
+						select {
+						case b := <-r.dataChan:
+							if b != ' ' {
+								r.buf = append(r.buf, b)
+							}
+						case <-time.After(2 * time.Millisecond):
+						case err := <-r.errChan:
+							r.errChan <- err
+						}
+					}
+				}
+
+				r.buf = r.buf[consumed:]
 				if event := translateLegacyByte(character); event != nil {
 					return event, nil
 				}

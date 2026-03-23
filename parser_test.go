@@ -483,3 +483,27 @@ func TestReadEvent_EscTimeout(t *testing.T) {
 		t.Errorf("Timeout too short: %v", duration)
 	}
 }
+
+func TestReadEvent_Far2lEqualsBug(t *testing.T) {
+	// Far2l's terminal emulator sends '= ' as two separate legacy keydown events.
+	// This test ensures our workaround consumes the space.
+	input := []byte("= ")
+	r := NewReader(bytes.NewReader(input))
+
+	// 1. Read the '=' event.
+	e, err := r.ReadEvent()
+	if err != nil {
+		t.Fatalf("ReadEvent failed: %v", err)
+	}
+	if e.Char != '=' {
+		t.Errorf("Expected '=', got %+v", e)
+	}
+
+	// 2. Try to read again. Because of the workaround, the space should have been
+	// consumed, and the reader should return EOF.
+	_, err = r.ReadEvent()
+	if err != io.EOF {
+		t.Errorf("Expected EOF after consuming space, got err: %v", err)
+	}
+}
+
