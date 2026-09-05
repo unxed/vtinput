@@ -26,8 +26,12 @@ const (
 	seqEnableExt  = "\x1b[?1004h\x1b[?2004h"
 	seqDisableExt = "\x1b[?2004l\x1b[?1004l"
 
+	// Both end with ST, the terminator APC is defined with. Ending the disable
+	// with BEL instead leaves a terminal that accepts only ST -- Termux is one --
+	// in far2l mode after exit: it keeps encoding input as far2l packets, the
+	// shell cannot read them, and reset(1) knows nothing about the mode.
 	seqEnableFar2l  = "\x1b_far2l1\x1b\\"
-	seqDisableFar2l = "\x1b_far2l0\x07"
+	seqDisableFar2l = "\x1b_far2l0\x1b\\"
 )
 
 // Protocol flags to selectively enable features.
