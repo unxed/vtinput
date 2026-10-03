@@ -127,6 +127,16 @@ func EnableProtocols(p Protocol) (func(), error) {
 	isWindowsNative := runtime.GOOS == "windows" && (InputMode == "" || InputMode == "ConPTY")
 	if InputMode == "ConPTY" || isWindowsNative {
 		Log("VTINPUT: Windows Native mode detected, suppressing redundant ANSI protocols.")
+		// MakeRaw just turned ENABLE_VIRTUAL_TERMINAL_INPUT on, but nothing
+		// on this path reads VT byte sequences -- the native reader takes
+		// console records -- and while the flag stays set the console host
+		// converts the terminal's mouse reports into key-event characters
+		// that queue up as visible text for the next reader (an application
+		// started with mouse reports still arriving shows them typed into
+		// its first line editor). Drop the flag right here; the state
+		// Restore hands back was captured before MakeRaw and does not
+		// depend on it.
+		clearVTInput(fd)
 		return func() {
 			term.Restore(fd, oldState)
 		}, nil
