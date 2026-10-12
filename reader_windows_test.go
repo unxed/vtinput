@@ -15,6 +15,30 @@ import (
 
 var procWriteConsoleInputW = windows.NewLazySystemDLL("kernel32.dll").NewProc("WriteConsoleInputW")
 
+func TestConsoleKeyEventAltGrText(t *testing.T) {
+	var rec inputRecord
+	rec.EventType = KeyEventType
+	le := binary.LittleEndian
+	le.PutUint32(rec.Event[0:4], 1)
+	le.PutUint16(rec.Event[4:6], 3)
+	le.PutUint16(rec.Event[6:8], VK_Q)
+	le.PutUint16(rec.Event[8:10], 16)
+	le.PutUint16(rec.Event[10:12], '@')
+	le.PutUint32(rec.Event[12:16], uint32(LeftCtrlPressed|RightAltPressed|ShiftPressed))
+	var decoder windowsTextDecoder
+	got := decoder.decode(consoleKeyEvent(rec))
+	if got == nil || !got.TextInput || got.Char != '@' || got.VirtualKeyCode != VK_Q ||
+		got.VirtualScanCode != 16 || got.RepeatCount != 3 || got.InputSource != "ConPTY" ||
+		got.ControlKeyState != LeftCtrlPressed|RightAltPressed|ShiftPressed {
+		t.Fatalf("native record lost semantics or physical fields: %+v", got)
+	}
+	le.PutUint32(rec.Event[0:4], 0)
+	got = decoder.decode(consoleKeyEvent(rec))
+	if got.KeyDown || got.TextInput || got.Char != '@' {
+		t.Fatalf("release classified as committed text: %+v", got)
+	}
+}
+
 // escKeyRecord is the KEY_EVENT a physical ESC press produces: key-down or
 // key-up, same layout ReadConsoleInputW parses in readConPTYEventTimeout.
 func escKeyRecord(keyDown bool) inputRecord {

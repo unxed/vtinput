@@ -280,6 +280,9 @@ func ParseFar2lAPC(data []byte) (*InputEvent, int, error) {
 
 // ParseWin32InputEvent attempts to parse a byte slice containing a Win32 Input Mode sequence.
 // Format: CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
+// Unicode characters already present in AltGr key-down records are TextInput.
+// The raw protocol can carry individual UTF-16 surrogate code units; use Reader
+// to combine those units before dispatching keyboard events.
 //
 // Returns:
 // - event: The parsed InputEvent (pointer).
@@ -336,6 +339,7 @@ func ParseWin32InputEvent(data []byte) (*InputEvent, int, error) {
 		}
 	}
 
+	markWindowsText(event)
 	return event, terminatorIdx + 1, nil
 }
 
@@ -595,9 +599,71 @@ func ParseMouseSGR(data []byte) (*InputEvent, int, error) {
 	return event, terminatorIdx + 1, nil
 }
 
-// ParseKitty handles the Kitty Keyboard Protocol sequence format.
-// Based on far2l's robust parsing logic and workarounds.
+// ParseKitty parses one Kitty keyboard event. Associated text containing more
+// than one rune requires ParseKittyEvents; this function rejects that input
+// rather than silently discarding part of a committed text string.
 func ParseKitty(data []byte) (*InputEvent, int, error) {
+	events, n, err := ParseKittyEvents(data)
+	if err != nil {
+		return nil, n, err
+	}
+	if len(events) != 1 {
+		return nil, 0, ErrInvalidSequence
+	}
+	return events[0], n, nil
+}
+
+// ParseKittyEvents preserves all runes of the protocol's associated-text field.
+// Each resulting text event retains the physical key and modifier information.
+// A keycode by itself is not evidence of text input: only associated text marks
+// a modified key as TextInput. Plain one-rune typing keeps its legacy semantics.
+func ParseKittyEvents(data []byte) ([]*InputEvent, int, error) {
+	end, command, err := scanCSI(data)
+	if err != nil {
+		return nil, 0, err
+	}
+	fields := strings.Split(string(data[2:end]), ";")
+	if len(fields) <= 2 {
+		event, n, err := parseKittyKey(data)
+		if err != nil {
+			return nil, n, err
+		}
+		return []*InputEvent{event}, n, nil
+	}
+	if len(fields) != 3 || fields[2] == "" {
+		return nil, 0, ErrInvalidSequence
+	}
+	keySequence := []byte("\x1b[" + fields[0] + ";" + fields[1] + string(command))
+	event, _, err := parseKittyKey(keySequence)
+	if err != nil {
+		return nil, 0, err
+	}
+	text := strings.Split(fields[2], ":")
+	runes := make([]rune, len(text))
+	for i, value := range text {
+		code, err := strconv.ParseUint(value, 10, 32)
+		if err != nil || !isTextRune(rune(code)) {
+			return nil, 0, ErrInvalidSequence
+		}
+		runes[i] = rune(code)
+	}
+	if !event.KeyDown {
+		// A release never commits text, even if a sender includes the field.
+		return []*InputEvent{event}, end + 1, nil
+	}
+	events := make([]*InputEvent, len(runes))
+	for i, ch := range runes {
+		copy := *event
+		copy.Char = ch
+		copy.TextInput = len(runes) > 1 || ch != event.Char || event.ControlKeyState&(LeftAltPressed|RightAltPressed|LeftCtrlPressed|RightCtrlPressed) != 0
+		events[i] = &copy
+	}
+	return events, end + 1, nil
+}
+
+// parseKittyKey implements the physical-key portion, without associated text.
+
+func parseKittyKey(data []byte) (*InputEvent, int, error) {
 	terminatorIdx, command, err := scanCSI(data)
 	if err != nil {
 		return nil, 0, err
