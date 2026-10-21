@@ -76,6 +76,26 @@ func main() {
 
 ## Testing & Diagnostics
 
+### Committed text and shortcuts
+
+`InputEvent.TextInput` distinguishes confirmed modified or composed text from
+a physical shortcut. Windows console and Win32 input records set it for AltGr
+text supplied by the sender, including composition format characters. Kitty sets it from its associated-text
+field; a printable keycode alone is not sufficient. Ordinary plain typing keeps
+its existing behavior. Legacy terminal input cannot reliably distinguish AltGr
+from shortcuts, and the parser does not guess using the local keyboard layout.
+
+Text events retain `VirtualKeyCode`, `VirtualScanCode`, `ControlKeyState`,
+`RepeatCount`, and `InputSource`. Applications should bypass shortcut dispatch for
+confirmed text while retaining the original event for protocol forwarding.
+
+Use `Reader` to receive complete Unicode characters: it combines Windows UTF-16
+surrogate pairs and emits every rune of Kitty associated text. Direct parser
+users can use `ParseKittyEvents` for the same lossless batch. The single-event
+`ParseKitty` API rejects associated text with multiple runes rather than dropping
+the trailing characters. `ParseWin32InputEvent` exposes raw code units; `Reader`
+performs their stateful combination.
+
 The repository includes a diagnostic tool. Run it to see exactly what `vtinput` sees when you type:
 
 ```bash

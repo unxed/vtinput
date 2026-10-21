@@ -76,6 +76,9 @@ type Reader struct {
 	// workaround (see win_double_unwrap.go).
 	winDoubleBuf []byte
 	winWrapping  bool
+
+	pendingTextEvents []*InputEvent
+	consoleText       windowsTextDecoder
 }
 
 // NewReader creates a synchronous input reader.
@@ -168,6 +171,33 @@ func (r *Reader) ReadEvent() (*InputEvent, error) {
 
 // ReadEventTimeout reads the next input event with an optional timeout.
 func (r *Reader) ReadEventTimeout(timeout time.Duration) (*InputEvent, error) {
+	var deadline time.Time
+	if timeout > 0 {
+		deadline = time.Now().Add(timeout)
+	}
+	for {
+		event, err := r.readEventTimeout(timeout)
+		if err != nil || event == nil {
+			return event, err
+		}
+		if event = r.consoleText.decode(event); event != nil {
+			return event, nil
+		}
+		if !deadline.IsZero() {
+			timeout = time.Until(deadline)
+			if timeout <= 0 {
+				return nil, nil
+			}
+		}
+	}
+}
+
+func (r *Reader) readEventTimeout(timeout time.Duration) (*InputEvent, error) {
+	if len(r.pendingTextEvents) > 0 {
+		event := r.pendingTextEvents[0]
+		r.pendingTextEvents = r.pendingTextEvents[1:]
+		return event, nil
+	}
 	// Fast path for Windows ConPTY
 	if r.useConPTY {
 		return r.readConPTYEventTimeout(timeout)
@@ -387,7 +417,12 @@ func (r *Reader) ReadEventTimeout(timeout time.Duration) (*InputEvent, error) {
 							if cmd == '_' {
 								event, consumed, pErr = ParseWin32InputEvent(parseBuf)
 							} else {
-								event, consumed, pErr = ParseKitty(parseBuf)
+								var events []*InputEvent
+								events, consumed, pErr = ParseKittyEvents(parseBuf)
+								if pErr == nil && len(events) > 0 {
+									event = events[0]
+									r.pendingTextEvents = events[1:]
+								}
 							}
 						}
 

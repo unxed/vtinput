@@ -272,16 +272,7 @@ func (r *Reader) readConPTYEventTimeout(timeout time.Duration) (*InputEvent, err
 
 	switch rec.EventType {
 	case 0x0001: // KEY_EVENT
-		ev := &InputEvent{
-			Type:            KeyEventType,
-			KeyDown:         binary.LittleEndian.Uint32(rec.Event[0:4]) > 0,
-			RepeatCount:     binary.LittleEndian.Uint16(rec.Event[4:6]),
-			VirtualKeyCode:  binary.LittleEndian.Uint16(rec.Event[6:8]),
-			VirtualScanCode: binary.LittleEndian.Uint16(rec.Event[8:10]),
-			Char:            rune(binary.LittleEndian.Uint16(rec.Event[10:12])),
-			ControlKeyState: ControlKeyState(binary.LittleEndian.Uint32(rec.Event[12:16])),
-			InputSource:     "ConPTY",
-		}
+		ev := consoleKeyEvent(rec)
 		// f4 WINE.md §2k.3: under wineconsole, a Cyrillic keypress produced no
 		// visible reaction at all -- the debug.log showed only a bare KeyUp
 		// with Char=0, no KeyDown, no EDIT_TRACE. That leaves two candidates:
@@ -329,6 +320,21 @@ func (r *Reader) readConPTYEventTimeout(timeout time.Duration) (*InputEvent, err
 
 	default:
 		return nil, nil
+	}
+}
+
+// consoleKeyEvent preserves the raw native record before Reader combines UTF-16
+// pairs and classifies the committed character.
+func consoleKeyEvent(rec inputRecord) *InputEvent {
+	return &InputEvent{
+		Type:            KeyEventType,
+		KeyDown:         binary.LittleEndian.Uint32(rec.Event[0:4]) > 0,
+		RepeatCount:     binary.LittleEndian.Uint16(rec.Event[4:6]),
+		VirtualKeyCode:  binary.LittleEndian.Uint16(rec.Event[6:8]),
+		VirtualScanCode: binary.LittleEndian.Uint16(rec.Event[8:10]),
+		Char:            rune(binary.LittleEndian.Uint16(rec.Event[10:12])),
+		ControlKeyState: ControlKeyState(binary.LittleEndian.Uint32(rec.Event[12:16])),
+		InputSource:     "ConPTY",
 	}
 }
 
