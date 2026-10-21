@@ -1,7 +1,7 @@
 github.com/emmansun/base64 v0.9.0 h1:92dLrE7iro6g/yWuPsd7M9TzJpe9fEeqKH0H7MApDtE=
 github.com/emmansun/base64 v0.9.0/go.mod h1:hp0DxCkKt7bF26HOh4BzhcObvqfH1BVy2vznoGThW6Q=
-github.com/uranic2/winkeys v0.0.0-20261012155219-35669ea25770 h1:8oRlCYZZYjW1YXysvQrb2Tuihud+kYBC0DbbqeSkuV4=
-github.com/uranic2/winkeys v0.0.0-20261012155219-35669ea25770/go.mod h1:eCDbEJFdYcii0Fd4O9u+CAqjJ4SkkhWDkhikNFwBCd4=
+github.com/unxed/winkeys v0.1.2 h1:uYlTpa37SeSEKDPKSn3H4WdbIQ6QS5Ouudy9TUAB2N0=
+github.com/unxed/winkeys v0.1.2/go.mod h1:eCDbEJFdYcii0Fd4O9u+CAqjJ4SkkhWDkhikNFwBCd4=
 golang.org/x/sys v0.44.0 h1:ildZl3J4uzeKP07r2F++Op7E9B29JRUy+a27EibtBTQ=
 golang.org/x/sys v0.44.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/term v0.40.0 h1:36e4zGLqU4yhjlmxEaagx2KuYbJq3EwY8K943ZsHcvg=
